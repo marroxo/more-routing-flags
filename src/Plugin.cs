@@ -116,22 +116,25 @@ namespace MoreRoutingFlags {
         /**
          * <summary>
          * Registers the next/previous/delete/picker shortcuts.
+         *
+         * Each is bound to its `ConfigEntry` directly (not `.Value`),
+         * so Mod Menu keybind changes take effect live, no restart needed.
          * </summary>
          */
         private void RegisterShortcuts() {
-            Shortcut next = new Shortcut(new[] { MoreRoutingFlags.Config.nextKeybind.Value });
+            Shortcut next = new Shortcut(new[] { MoreRoutingFlags.Config.nextKeybind });
             next.onTrigger.AddListener(SwitchNext);
             UIRoot.AddShortcut(next);
 
-            Shortcut previous = new Shortcut(new[] { MoreRoutingFlags.Config.previousKeybind.Value });
+            Shortcut previous = new Shortcut(new[] { MoreRoutingFlags.Config.previousKeybind });
             previous.onTrigger.AddListener(SwitchPrevious);
             UIRoot.AddShortcut(previous);
 
-            Shortcut delete = new Shortcut(new[] { MoreRoutingFlags.Config.deleteKeybind.Value });
+            Shortcut delete = new Shortcut(new[] { MoreRoutingFlags.Config.deleteKeybind });
             delete.onTrigger.AddListener(DeleteActive);
             UIRoot.AddShortcut(delete);
 
-            Shortcut openPicker = new Shortcut(new[] { MoreRoutingFlags.Config.pickerKeybind.Value });
+            Shortcut openPicker = new Shortcut(new[] { MoreRoutingFlags.Config.pickerKeybind });
             openPicker.onTrigger.AddListener(TogglePicker);
             UIRoot.AddShortcut(openPicker);
         }
@@ -191,7 +194,10 @@ namespace MoreRoutingFlags {
          * Deletes whichever flag the player is currently aiming at,
          * falling back to the active flag if none is aimed at.
          *
-         * Falls back to vanilla's own reset when the set becomes empty.
+         * Falls back to vanilla's own reset when the set becomes empty,
+         * then restores `usedRoutingFlag`/`currentlyUsingFlag`, since
+         * vanilla's reset also drops the player into normal (non-flag)
+         * mode as a side effect.
          * </summary>
          */
         private void DeleteActive() {
@@ -220,6 +226,8 @@ namespace MoreRoutingFlags {
             }
             else if (Cache.routingFlag != null) {
                 Cache.routingFlag.ResetCurrentFlagPosition();
+                Cache.routingFlag.usedRoutingFlag[Cache.routingFlag.currentPeak] = 1;
+                Cache.routingFlag.currentlyUsingFlag = true;
             }
 
             FlagMarkers.Rebuild(currentSet);

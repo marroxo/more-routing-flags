@@ -4,7 +4,7 @@
     <Platform>Any CPU</Platform>
     <AssemblyName>MoreRoutingFlags</AssemblyName>
     <Description>Place multiple routing flags per peak and switch between them.</Description>
-    <Version>0.1.1</Version>
+    <Version>0.1.2</Version>
     <RootNamespace>$(AssemblyName)</RootNamespace>
     <Configurations>Debug;Release</Configurations>
     <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>

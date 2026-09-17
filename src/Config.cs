@@ -103,7 +103,7 @@ namespace MoreRoutingFlags {
             );
 
             pickerKeybind = configFile.Bind(
-                "Keybinds", "pickerKeybind", KeyCode.Tab,
+                "Keybinds", "pickerKeybind", KeyCode.LeftAlt,
                 "The keybind to open the flag picker."
             );
 
