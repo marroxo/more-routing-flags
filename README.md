@@ -79,7 +79,7 @@ location, add a `Config.props` file to the root of this repository:
 `BepInEx/plugins` after every build.
 
 # Credits
-Forked/referenced from a few of [Kaden's](github.com/Kaden548) mods, credit to him:
+Forked/referenced from a few of [Kaden's](github.com/Kaden548) mods, credit to their:
 
 - [poy-template-dotnet](https://github.com/Kaden5480/poy-template-dotnet)
 - Requires [UILib](https://github.com/Kaden5480/poy-ui-lib), optionally
