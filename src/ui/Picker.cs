@@ -1,6 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 
+using HarmonyLib;
 using UILib;
 using UILib.Layouts;
 using UILib.Notifications;
@@ -39,6 +42,7 @@ namespace MoreRoutingFlags {
         private const float flyInDuration = 0.4f;
 
         private static Logger logger = new Logger(typeof(Picker));
+        private static readonly FieldInfo playerField = AccessTools.Field(typeof(RoutingFlag), "player");
 
         private Overlay overlay;
         private List<UIButton> buttons = new List<UIButton>();
@@ -46,6 +50,11 @@ namespace MoreRoutingFlags {
         private FlagSet currentSet;
         private Renderer activeGlowRenderer;
         private float openTime;
+
+        // Pending flag placement.
+        private Flag orientingFlag;
+        private Vector3 preOrientPosition;
+        private Quaternion preOrientRotation;
 
         internal bool isOpen { get; private set; }
 
@@ -87,7 +96,6 @@ namespace MoreRoutingFlags {
             Rebuild(set);
             FlagMarkers.SetPickable(true);
             SetActiveGlow(true);
-            FlyCamera.SetClutterHidden(true);
 
             overlay.Show();
             isOpen = true;
@@ -181,13 +189,18 @@ namespace MoreRoutingFlags {
                 return;
             }
 
-            // Checked directly: isCurrentlyNavigationMenu would close this the instant it opens
-            if (UnityEngine.Input.GetKeyDown(KeyCode.Escape) == true) {
-                Close();
+            if (FlyCamera.camera == null) {
                 return;
             }
 
-            if (FlyCamera.camera == null) {
+            if (orientingFlag != null) {
+                UpdateOrienting();
+                return;
+            }
+
+            // Checked directly: isCurrentlyNavigationMenu would close this the instant it opens
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Escape) == true) {
+                Close();
                 return;
             }
 
@@ -207,6 +220,17 @@ namespace MoreRoutingFlags {
 
             if (UnityEngine.Input.GetMouseButtonDown(1) == true) {
                 TryRightClickDelete();
+            }
+
+            // Middle mouse pans the overview.
+            if (UnityEngine.Input.GetMouseButton(2) == true && FlyCamera.isFlying == false) {
+                float panYaw = UnityEngine.Input.GetAxis("Mouse X") * LookSensitivityX();
+                float panPitch = UnityEngine.Input.GetAxis("Mouse Y") * LookSensitivityY();
+                FlyCamera.FreeLook(panYaw, panPitch);
+            }
+
+            if (PlacePressed() == true) {
+                TryPlaceFlag();
             }
 
             for (int i = 0; i < buttons.Count; i++) {
@@ -276,7 +300,8 @@ namespace MoreRoutingFlags {
          */
         private void TryClickFlag() {
             bool hitActive;
-            int index = RaycastFlagIndex(out hitActive);
+            RaycastHit hit;
+            int index = RaycastFlagIndex(out hitActive, out hit);
 
             if (hitActive == true) {
                 // Active flag has no marker, clicking it just closes the picker
@@ -291,6 +316,159 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
+         * Checks the vanilla placement binding.
+         * </summary>
+         */
+        private bool PlacePressed() {
+            Rewired.Player player = Cache.routingFlag != null && playerField != null
+                ? (Rewired.Player) playerField.GetValue(Cache.routingFlag)
+                : Rewired.ReInput.players.GetPlayer(0);
+
+            return player != null && player.GetButtonDown("Interact");
+        }
+
+        /**
+         * <summary>
+         * Starts a flag placement at the camera target.
+         * </summary>
+         */
+        private void TryPlaceFlag() {
+            Ray ray = FlyCamera.camera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+
+            bool hitActive;
+            RaycastHit hit;
+            int index = RaycastFlagIndex(ray, out hitActive, out hit);
+
+            if (hitActive == true || index != -1) {
+                return;
+            }
+
+            if (hit.collider == null || Cache.leavePeakScene == null) {
+                return;
+            }
+
+            // Match vanilla placement validation.
+            RaycastHit groundHit;
+            bool foundGround = Physics.Raycast(ray, out groundHit, 200f, Cache.terrainMask)
+                && (Cache.routingFlag == null
+                    || (groundHit.collider.CompareTag("ClimbableRigidbody") == false
+                        && groundHit.collider.name.Contains("ResetBox") == false
+                        && groundHit.collider.gameObject.layer != 17));
+
+            if (foundGround == false) {
+                Notifier.Notify(
+                    "More Routing Flags",
+                    "Aim at solid ground to place a flag",
+                    NotificationType.Normal
+                );
+                return;
+            }
+
+            if (currentSet.flags.Count >= Config.maxFlags.Value) {
+                Notifier.Notify(
+                    "More Routing Flags",
+                    $"Flag limit reached ({Config.maxFlags.Value})",
+                    NotificationType.Normal
+                );
+                return;
+            }
+
+            Vector3 offset = Cache.leavePeakScene.transform.InverseTransformPoint(groundHit.point);
+            orientingFlag = new Flag(offset, groundHit.normal, 0f, 0f, "");
+
+            preOrientPosition = FlyCamera.position;
+            preOrientRotation = FlyCamera.rotation;
+
+            FlyCamera.SnapTo(
+                groundHit.point + groundHit.normal,
+                Quaternion.LookRotation(-groundHit.normal)
+            );
+
+            Notifier.Notify(
+                "More Routing Flags",
+                "Look where you want this flag to face, then press E to confirm",
+                NotificationType.Normal
+            );
+        }
+
+        /**
+         * <summary>
+         * Updates the pending flag orientation.
+         * </summary>
+         */
+        private void UpdateOrienting() {
+            if (UnityEngine.Input.GetKeyDown(KeyCode.Escape) == true) {
+                CancelOrient();
+                return;
+            }
+
+            float deltaYaw = UnityEngine.Input.GetAxis("Mouse X") * LookSensitivityX();
+            float deltaPitch = UnityEngine.Input.GetAxis("Mouse Y") * LookSensitivityY();
+            FlyCamera.FreeLook(deltaYaw, deltaPitch);
+
+            if (PlacePressed() == true) {
+                ConfirmOrient();
+            }
+        }
+
+        /**
+         * <summary>
+         * Gets the player yaw sensitivity.
+         * </summary>
+         */
+        private static float LookSensitivityX() {
+            return Cache.playerCamX != null ? Cache.playerCamX.sensitivityX : 2f;
+        }
+
+        /**
+         * <summary>
+         * Gets the player pitch sensitivity.
+         * </summary>
+         */
+        private static float LookSensitivityY() {
+            return Cache.playerCamY != null ? Cache.playerCamY.sensitivityY : 2f;
+        }
+
+        /**
+         * <summary>
+         * Saves the pending flag and returns to the overview.
+         * </summary>
+         */
+        private void ConfirmOrient() {
+            Vector3 euler = FlyCamera.rotation.eulerAngles;
+            orientingFlag.camX = euler.y;
+            orientingFlag.camY = euler.x > 180f ? euler.x - 360f : euler.x;
+
+            currentSet.Add(orientingFlag);
+            FlagStore.Save(Plugin.currentKey, currentSet);
+
+            FlagMarkers.Rebuild(currentSet);
+            FlagMarkers.SetPickable(true);
+            Rebuild(currentSet);
+            Plugin.instance.hud.Show(currentSet);
+
+            Vector3 returnPos = preOrientPosition;
+            Quaternion returnRot = preOrientRotation;
+            orientingFlag = null;
+
+            FlyCamera.FlyBackTo(returnPos, returnRot, null);
+        }
+
+        /**
+         * <summary>
+         * Discards the pending flag and returns to the overview.
+         * </summary>
+         */
+        private void CancelOrient() {
+            Vector3 returnPos = preOrientPosition;
+            Quaternion returnRot = preOrientRotation;
+            orientingFlag = null;
+
+            FlyCamera.FlyBackTo(returnPos, returnRot, null);
+        }
+
+        /**
+         * <summary>
          * Raycasts from the mouse and deletes whichever flag marker
          * was hit, if any. The active flag can't be deleted this way
          * (no marker to click), same as it can't be aimed-and-deleted
@@ -299,7 +477,8 @@ namespace MoreRoutingFlags {
          */
         private void TryRightClickDelete() {
             bool hitActive;
-            int index = RaycastFlagIndex(out hitActive);
+            RaycastHit hit;
+            int index = RaycastFlagIndex(out hitActive, out hit);
 
             if (hitActive == false && index != -1) {
                 DeleteFlag(index);
@@ -312,10 +491,12 @@ namespace MoreRoutingFlags {
          * that landed on a UI button first.
          * </summary>
          * <param name="hitActive">Whether the ray hit the active flag's live object</param>
+         * <param name="hit">The raw raycast hit, for callers that need the world point/normal</param>
          * <returns>The index into <see cref="flags"/> hit, or -1</returns>
          */
-        private int RaycastFlagIndex(out bool hitActive) {
+        private int RaycastFlagIndex(out bool hitActive, out RaycastHit hit) {
             hitActive = false;
+            hit = default(RaycastHit);
 
             if (UnityEngine.EventSystems.EventSystem.current != null
                 && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject() == true
@@ -325,8 +506,21 @@ namespace MoreRoutingFlags {
             }
 
             Ray ray = FlyCamera.camera.ScreenPointToRay(UnityEngine.Input.mousePosition);
+            return RaycastFlagIndex(ray, out hitActive, out hit);
+        }
 
-            RaycastHit hit;
+        /**
+         * <summary>
+         * Finds a flag hit by a ray.
+         * </summary>
+         * <param name="ray">The ray to cast</param>
+         * <param name="hitActive">Whether the ray hit the active flag's live object</param>
+         * <param name="hit">The raw raycast hit, for callers that need the world point/normal</param>
+         * <returns>The index into <see cref="flags"/> hit, or -1</returns>
+         */
+        private int RaycastFlagIndex(Ray ray, out bool hitActive, out RaycastHit hit) {
+            hitActive = false;
+
             if (Physics.Raycast(ray, out hit, 200f) == false) {
                 logger.LogInfo("RaycastFlagIndex: no hit");
                 return -1;
@@ -368,8 +562,73 @@ namespace MoreRoutingFlags {
             Plugin.instance.hud.Show(currentSet);
 
             if (currentSet.flags.Count == 0) {
-                Close();
+                CloseAndFlyBack();
             }
+        }
+
+        /**
+         * <summary>
+         * Refreshes an open picker after an external deletion.
+         * </summary>
+         * <param name="set">The flag set, already updated by the caller</param>
+         */
+        internal void SyncAfterExternalDelete(FlagSet set) {
+            if (isOpen == false) {
+                return;
+            }
+
+            if (set.flags.Count == 0) {
+                CloseAndFlyBack();
+            }
+            else {
+                Rebuild(set);
+                ScheduleReframe(set);
+            }
+        }
+
+        // Delay before reframing after deletion.
+        private const float reframeDelay = 0.3f;
+        private IEnumerator reframeRoutine;
+
+        /**
+         * <summary>
+         * Schedules one delayed overview reframe.
+         * </summary>
+         * <param name="set">The flag set to reframe on</param>
+         */
+        private void ScheduleReframe(FlagSet set) {
+            if (reframeRoutine != null) {
+                Plugin.instance.StopCoroutine(reframeRoutine);
+            }
+
+            reframeRoutine = ReframeAfterDelay(set);
+            Plugin.instance.StartCoroutine(reframeRoutine);
+        }
+
+        private IEnumerator ReframeAfterDelay(FlagSet set) {
+            yield return new WaitForSeconds(reframeDelay);
+            reframeRoutine = null;
+            FlyCamera.FrameAll(set.flags);
+        }
+
+        /**
+         * <summary>
+         * Closes the picker and returns to the player.
+         * </summary>
+         */
+        private void CloseAndFlyBack() {
+            Close(releaseCamera: false);
+
+            if (Cache.playerCamera == null) {
+                FlyCamera.Release();
+                return;
+            }
+
+            FlyCamera.FlyBackTo(
+                Cache.playerCamera.transform.position,
+                Cache.playerCamera.transform.rotation,
+                FlyCamera.Release
+            );
         }
 
         /**
@@ -388,7 +647,7 @@ namespace MoreRoutingFlags {
 
             FlyCamera.FlyTo(flag, () => {
                 FlagPlacer.Apply(flag);
-                FlagPlacer.Teleport();
+                FlagPlacer.Teleport(flag);
                 FlyCamera.Release();
                 FlagMarkers.Rebuild(set);
                 Plugin.instance.hud.Show(set);
@@ -411,11 +670,18 @@ namespace MoreRoutingFlags {
                 return;
             }
 
+            // Discard an unfinished placement.
+            orientingFlag = null;
+
+            if (reframeRoutine != null) {
+                Plugin.instance.StopCoroutine(reframeRoutine);
+                reframeRoutine = null;
+            }
+
             isOpen = false;
-            overlay.Hide();
+            overlay.Hide(force: true);
             FlagMarkers.SetPickable(false);
             SetActiveGlow(false);
-            FlyCamera.SetClutterHidden(false);
 
             if (releaseCamera == true) {
                 FlyCamera.Release();

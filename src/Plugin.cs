@@ -24,6 +24,14 @@ namespace MoreRoutingFlags {
         internal static FlagSet currentSet;
         internal static string currentKey;
 
+        // Hold-to-delete timings.
+        private const float deleteHoldDelay = 0.4f;
+        private const float deleteHoldInterval = 0.1f;
+        private const float deleteHoldSyncInterval = 0.25f;
+        private float deleteHoldTimer;
+        private float deleteHoldSyncTimer;
+        private bool deleteHoldPending;
+
         /**
          * <summary>
          * Executes when the plugin is being loaded.
@@ -37,10 +45,10 @@ namespace MoreRoutingFlags {
             Patcher.Patch(typeof(FlagPlaced));
             Patcher.Patch(typeof(FlagTeleport));
 
-            // Catch a vanilla rename here instead of a NullReferenceException later
+            // Fail early on renamed vanilla fields.
             bool fieldsOk = FlagPlacer.ValidateFields()
                 & FlagTeleport.ValidateFields()
-                & FlyCamera.ValidateFields();
+                & Cache.ValidateFields();
 
             if (fieldsOk == true) {
                 LogInfo(
@@ -67,7 +75,7 @@ namespace MoreRoutingFlags {
                 Cache.FindObjects();
                 DistanceCamera.SceneLoad();
 
-                bool isCustomLevel = Cache.routingFlag != null && Cache.routingFlag.isCustomLevel == true;
+                bool isCustomLevel = CustomLevelManager.control != null && CustomLevelManager.control.InCustomStages == true;
                 string peakName = isCustomLevel == true ? CustomLevelManager.control.peakName : null;
                 currentKey = FlagStore.KeyFor(Cache.scene, isCustomLevel, peakName);
                 currentSet = FlagStore.Load(currentKey);
@@ -109,16 +117,13 @@ namespace MoreRoutingFlags {
             ModInfo info = ModManager.Register(this);
             info.Add(typeof(MoreRoutingFlags.Config));
 
-            // Build time is the real "did this reload" signal, not the version
+            // Show the current build time.
             info.description = $"Build: {PluginInfo.PLUGIN_BUILD_TIME}";
         }
 
         /**
          * <summary>
-         * Registers the next/previous/delete/picker shortcuts.
-         *
-         * Each is bound to its `ConfigEntry` directly (not `.Value`),
-         * so Mod Menu keybind changes take effect live, no restart needed.
+         * Registers live-updating shortcuts.
          * </summary>
          */
         private void RegisterShortcuts() {
@@ -145,7 +150,7 @@ namespace MoreRoutingFlags {
          * </summary>
          */
         private void SwitchNext() {
-            if (MoreRoutingFlags.Config.enabled.Value == false || currentSet == null || currentSet.flags.Count == 0) {
+            if (MoreRoutingFlags.Config.IsActive() == false || currentSet == null || currentSet.flags.Count == 0) {
                 return;
             }
 
@@ -160,7 +165,7 @@ namespace MoreRoutingFlags {
          * </summary>
          */
         private void SwitchPrevious() {
-            if (MoreRoutingFlags.Config.enabled.Value == false || currentSet == null || currentSet.flags.Count == 0) {
+            if (MoreRoutingFlags.Config.IsActive() == false || currentSet == null || currentSet.flags.Count == 0) {
                 return;
             }
 
@@ -182,7 +187,7 @@ namespace MoreRoutingFlags {
 
             FlyCamera.SwitchTo(currentSet, flag, () => {
                 FlagPlacer.Apply(flag);
-                FlagPlacer.Teleport();
+                FlagPlacer.Teleport(flag);
                 FlyCamera.Release();
                 FlagMarkers.Rebuild(currentSet);
                 hud.Show(currentSet);
@@ -191,34 +196,49 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Deletes whichever flag the player is currently aiming at,
-         * falling back to the active flag if none is aimed at.
-         *
-         * Falls back to vanilla's own reset when the set becomes empty,
-         * then restores `usedRoutingFlag`/`currentlyUsingFlag`, since
-         * vanilla's reset also drops the player into normal (non-flag)
-         * mode as a side effect.
+         * Deletes the aimed or active flag.
          * </summary>
          */
         private void DeleteActive() {
-            if (MoreRoutingFlags.Config.enabled.Value == false || currentSet == null || currentSet.flags.Count == 0) {
-                return;
+            if (RemoveActiveFlag() == true) {
+                SyncAfterDelete();
+            }
+        }
+
+        /**
+         * <summary>
+         * Removes a flag without refreshing UI or storage.
+         * </summary>
+         * <returns>Whether a flag was actually removed</returns>
+         */
+        private bool RemoveActiveFlag() {
+            if (MoreRoutingFlags.Config.IsActive() == false || currentSet == null || currentSet.flags.Count == 0) {
+                return false;
             }
 
-            int aimed = FindAimedFlagIndex();
-            if (aimed != -1) {
-                currentSet.Select(aimed);
+            // The player camera is frozen while the picker is open.
+            if (picker.isOpen == false) {
+                int aimed = FindAimedFlagIndex();
+                if (aimed != -1) {
+                    currentSet.Select(aimed);
+                }
             }
 
             if (currentSet.active == -1) {
-                return;
+                return false;
             }
 
             currentSet.Remove();
-            FlagStore.Save(currentKey, currentSet);
+            return true;
+        }
 
-            // Release unconditionally in case this happens mid-flight
-            FlyCamera.Release();
+        /**
+         * <summary>
+         * Saves and refreshes a changed flag set.
+         * </summary>
+         */
+        private void SyncAfterDelete() {
+            FlagStore.Save(currentKey, currentSet);
 
             Flag active = currentSet.Active();
             if (active != null) {
@@ -230,8 +250,15 @@ namespace MoreRoutingFlags {
                 Cache.routingFlag.currentlyUsingFlag = true;
             }
 
+            // Keep the picker camera until it closes itself.
+            if (picker.isOpen == false) {
+                // Cancel any in-progress flight.
+                FlyCamera.Release();
+            }
+
             FlagMarkers.Rebuild(currentSet);
             hud.Show(currentSet);
+            picker.SyncAfterExternalDelete(currentSet);
         }
 
         /**
@@ -277,14 +304,14 @@ namespace MoreRoutingFlags {
          * </summary>
          */
         private void TogglePicker() {
-            if (MoreRoutingFlags.Config.enabled.Value == false || currentSet == null) {
+            if (MoreRoutingFlags.Config.IsActive() == false || currentSet == null) {
                 return;
             }
 
             if (picker.isOpen == true) {
                 picker.Close();
             }
-            else if (currentSet.flags.Count > 0) {
+            else {
                 picker.Open(currentSet);
             }
         }
@@ -297,6 +324,46 @@ namespace MoreRoutingFlags {
         private void Update() {
             if (picker != null) {
                 picker.Update();
+            }
+
+            UpdateDeleteHold();
+        }
+
+        /**
+         * <summary>
+         * Repeats deletion after a held-key delay.
+         * </summary>
+         */
+        private void UpdateDeleteHold() {
+            if (MoreRoutingFlags.Config.IsActive() == false
+                || UnityEngine.Input.GetKey(MoreRoutingFlags.Config.deleteKeybind.Value) == false
+            ) {
+                if (deleteHoldPending == true) {
+                    deleteHoldPending = false;
+                    SyncAfterDelete();
+                }
+
+                deleteHoldTimer = 0f;
+                deleteHoldSyncTimer = 0f;
+                return;
+            }
+
+            deleteHoldTimer += Time.deltaTime;
+
+            if (deleteHoldTimer >= deleteHoldDelay) {
+                if (RemoveActiveFlag() == true) {
+                    deleteHoldPending = true;
+                }
+
+                deleteHoldTimer -= deleteHoldInterval;
+
+                // Batch expensive refresh work.
+                deleteHoldSyncTimer += deleteHoldInterval;
+                if (deleteHoldSyncTimer >= deleteHoldSyncInterval && deleteHoldPending == true) {
+                    deleteHoldPending = false;
+                    deleteHoldSyncTimer = 0f;
+                    SyncAfterDelete();
+                }
             }
         }
 

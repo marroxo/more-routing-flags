@@ -4,7 +4,7 @@
     <Platform>Any CPU</Platform>
     <AssemblyName>MoreRoutingFlags</AssemblyName>
     <Description>Place multiple routing flags per peak and switch between them.</Description>
-    <Version>0.1.2</Version>
+    <Version>1.0.0</Version>
     <RootNamespace>$(AssemblyName)</RootNamespace>
     <Configurations>Debug;Release</Configurations>
     <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
@@ -34,6 +34,9 @@
     <PackageReference Include="BepInEx.Analyzers" Version="1.*" PrivateAssets="all"/>
     <PackageReference Include="BepInEx.Core" Version="5.*"/>
     <PackageReference Include="UnityEngine.Modules" Version="2019.4.41" PrivateAssets="all"/>
+    <!-- Pinned to match the CBOR.dll FastReset already ships in BepInEx/plugins,
+         so both mods share one loaded assembly instead of two different versions. -->
+    <PackageReference Include="PeterO.Cbor" Version="4.5.5"/>
   </ItemGroup>
 
   <ItemGroup Condition="'$(OS)' == 'Unix'">
@@ -102,6 +105,12 @@
       SourceFiles="$(OutputPath)/$(AssemblyName).dll"
       DestinationFolder="$(PluginOutputPath)/"/>
     <Message Text="$(AssemblyName) -> $(PluginOutputPath)/$(AssemblyName).dll" Importance="High"/>
+    <!-- Only copy CBOR.dll if the plugins folder doesn't already have one
+         (e.g. from FastReset), so we never clobber a copy another mod owns. -->
+    <Copy
+      Condition="!Exists('$(PluginOutputPath)/CBOR.dll')"
+      SourceFiles="$(OutputPath)/libs/CBOR.dll"
+      DestinationFolder="$(PluginOutputPath)/"/>
   </Target>
 </Project>
 <!-- vim: set et sw=2 ts=2 ft=xml: -->

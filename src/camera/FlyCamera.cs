@@ -24,22 +24,6 @@ namespace MoreRoutingFlags {
         private static Logger logger = new Logger(typeof(FlyCamera));
 
         private static FlyCamera instance;
-        private static readonly FieldInfo maskField = AccessTools.Field(typeof(RoutingFlag), "mask");
-
-        /**
-         * <summary>
-         * Checks the reflected field this class needs.
-         * Run once from Plugin.Awake.
-         * </summary>
-         */
-        internal static bool ValidateFields() {
-            if (maskField == null) {
-                logger.LogError("Could not find vanilla field 'RoutingFlag.mask'.");
-                return false;
-            }
-
-            return true;
-        }
 
         private GameObject root;
         internal static UECamera camera => instance?.cameraComponent;
@@ -50,7 +34,7 @@ namespace MoreRoutingFlags {
         private Lock @lock;
         private IEnumerator flight;
 
-        // Last-computed overview bounds, keeps manual scroll-zoom from wandering off
+        // Bounds for overview zoom.
         private static Vector3 boundsCenter;
         private static float boundsRadius = 1f;
 
@@ -110,11 +94,7 @@ namespace MoreRoutingFlags {
                 return false;
             }
 
-            // Not currentlyUsingFlag: it only flips true on next scene load, gate on having a flag instead
-            if (Cache.routingFlag == null
-                || Plugin.currentSet == null
-                || Plugin.currentSet.flags.Count == 0
-            ) {
+            if (Plugin.currentSet == null) {
                 return false;
             }
 
@@ -151,49 +131,6 @@ namespace MoreRoutingFlags {
             processLayer.volumeLayer = originalLayer.volumeLayer;
         }
 
-        private Dictionary<Terrain, float> hiddenTerrainTreeDistances;
-
-        /**
-         * <summary>
-         * Hides (or restores) trees while the picker overview is open,
-         * by zeroing each terrain's tree draw distance. Peaks of Yore
-         * paints trees through Unity's Terrain tree system rather than
-         * as ordinary scene GameObjects, confirmed by testing: toggling
-         * Renderer.enabled and GameObject.SetActive on the matching
-         * "treeline"/"conifer" renderers had zero visual effect, while
-         * this does.
-         * </summary>
-         * <param name="hidden">Whether clutter should be hidden</param>
-         */
-        internal static void SetClutterHidden(bool hidden) {
-            if (instance == null) {
-                return;
-            }
-
-            if (hidden == false) {
-                if (instance.hiddenTerrainTreeDistances != null) {
-                    foreach (KeyValuePair<Terrain, float> pair in instance.hiddenTerrainTreeDistances) {
-                        if (pair.Key != null) {
-                            pair.Key.treeDistance = pair.Value;
-                        }
-                    }
-
-                    instance.hiddenTerrainTreeDistances = null;
-                }
-
-                return;
-            }
-
-            instance.hiddenTerrainTreeDistances = new Dictionary<Terrain, float>();
-
-            foreach (Terrain terrain in Terrain.activeTerrains) {
-                instance.hiddenTerrainTreeDistances[terrain] = terrain.treeDistance;
-                terrain.treeDistance = 0f;
-            }
-
-            logger.LogInfo($"SetClutterHidden(true): zeroed tree distance on {Terrain.activeTerrains.Length} terrain(s)");
-        }
-
         /**
          * <summary>
          * Enables the fly camera, taking over from the player's camera.
@@ -204,7 +141,8 @@ namespace MoreRoutingFlags {
                 @lock = new Lock();
             }
 
-            @lock.SetMode(LockMode.Default);
+            // Block vanilla navigation while active.
+            @lock.SetMode(LockMode.Default | LockMode.Navigation);
 
             CopyPostProcessing();
 
@@ -223,24 +161,7 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Nudges the fly camera along a given direction (e.g. toward
-         * whatever's under the mouse cursor, not just straight
-         * ahead), for a manual scroll-wheel zoom while the picker is
-         * open. Does nothing to the player, only this camera. No-ops
-         * when not active or mid-flight (a running coroutine would
-         * just overwrite the nudge next frame). Clamped against
-         * terrain when zooming in (positive amount) so it can't pass
-         * through geometry.
-         * </summary>
-         * <param name="direction">Direction to move along, need not be normalized</param>
-         * <param name="amount">Distance to move, negative pulls back</param>
-         */
-        /**
-         * <summary>
-         * Distance from the camera to the last-computed overview
-         * center, for scaling zoom speed to the scene's actual scale
-         * (a small peak and Solemn Tempest need very different
-         * scroll speeds to feel usable).
+         * Gets the camera distance from the overview center.
          * </summary>
          */
         internal static float DistanceFromBoundsCenter() {
@@ -251,6 +172,13 @@ namespace MoreRoutingFlags {
             return Vector3.Distance(instance.root.transform.position, boundsCenter);
         }
 
+        /**
+         * <summary>
+         * Moves the overview camera along a direction.
+         * </summary>
+         * <param name="direction">Direction to move along, need not be normalized</param>
+         * <param name="amount">Distance to move, negative pulls back</param>
+         */
         internal static void Zoom(Vector3 direction, float amount) {
             if (isActive == false || instance.flight != null) {
                 return;
@@ -264,7 +192,7 @@ namespace MoreRoutingFlags {
 
             Vector3 desired = instance.root.transform.position + dir * amount;
 
-            // Keep the camera within the last-framed overview area
+            // Keep zoom within the overview.
             Vector3 fromCenter = desired - boundsCenter;
             if (fromCenter.magnitude > boundsRadius) {
                 desired = boundsCenter + fromCenter.normalized * boundsRadius;
@@ -275,19 +203,12 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Shortens a zoom-in distance so it stops just short of
-         * whatever it would otherwise pass through.
+         * Limits zoom before terrain.
          * </summary>
          */
         private static float ClampZoomDistance(Vector3 origin, Vector3 direction, float distance) {
-            if (Cache.routingFlag == null) {
-                return distance;
-            }
-
-            int mask = ((LayerMask) maskField.GetValue(Cache.routingFlag)).value;
-
             RaycastHit hit;
-            if (Physics.Raycast(origin, direction, out hit, distance, mask) == true) {
+            if (Physics.Raycast(origin, direction, out hit, distance, Cache.terrainMask) == true) {
                 return Mathf.Max(0f, hit.distance - 1f);
             }
 
@@ -324,6 +245,118 @@ namespace MoreRoutingFlags {
 
             if (Cache.playerRb != null) {
                 Cache.playerRb.isKinematic = false;
+            }
+        }
+
+        /**
+         * <summary>
+         * Gets the fly camera position.
+         * </summary>
+         */
+        internal static Vector3 position => instance?.root.transform.position ?? Vector3.zero;
+
+        /**
+         * <summary>
+         * Gets the fly camera rotation.
+         * </summary>
+         */
+        internal static Quaternion rotation => instance?.root.transform.rotation ?? Quaternion.identity;
+
+        /**
+         * <summary>
+         * Checks whether the camera is flying.
+         * </summary>
+         */
+        internal static bool isFlying => instance != null && instance.flight != null;
+
+        /**
+         * <summary>
+         * Stops flying and snaps to a pose.
+         * </summary>
+         * <param name="pos">The position to snap to</param>
+         * <param name="rot">The rotation to snap to</param>
+         */
+        internal static void SnapTo(Vector3 pos, Quaternion rot) {
+            if (isActive == false) {
+                return;
+            }
+
+            if (instance.flight != null) {
+                Plugin.instance.StopCoroutine(instance.flight);
+                instance.flight = null;
+            }
+
+            instance.root.transform.position = pos;
+            instance.root.transform.rotation = rot;
+        }
+
+        /**
+         * <summary>
+         * Rotates the camera in place.
+         * </summary>
+         * <param name="deltaYaw">Degrees to rotate around world up</param>
+         * <param name="deltaPitch">Degrees to rotate up/down</param>
+         */
+        internal static void FreeLook(float deltaYaw, float deltaPitch) {
+            if (isActive == false) {
+                return;
+            }
+
+            Vector3 euler = instance.root.transform.eulerAngles;
+            float pitch = euler.x > 180f ? euler.x - 360f : euler.x;
+
+            pitch = Mathf.Clamp(pitch - deltaPitch, -89f, 89f);
+            float yaw = euler.y + deltaYaw;
+
+            instance.root.transform.rotation = Quaternion.Euler(pitch, yaw, 0f);
+        }
+
+        /**
+         * <summary>
+         * Flies to a pose.
+         * </summary>
+         * <param name="pos">The position to fly to</param>
+         * <param name="rot">The rotation to fly to</param>
+         * <param name="onArrive">Called once the flight finishes</param>
+         */
+        internal static void FlyBackTo(Vector3 pos, Quaternion rot, Action onArrive) {
+            if (isActive == false) {
+                onArrive?.Invoke();
+                return;
+            }
+
+            if (instance.flight != null) {
+                Plugin.instance.StopCoroutine(instance.flight);
+                instance.flight = null;
+            }
+
+            if (Config.flyDuration.Value <= 0f) {
+                instance.root.transform.position = pos;
+                instance.root.transform.rotation = rot;
+                onArrive?.Invoke();
+                return;
+            }
+
+            instance.flight = instance.FlyBackRoutine(pos, rot, onArrive);
+            Plugin.instance.StartCoroutine(instance.flight);
+        }
+
+        /**
+         * <summary>
+         * Flies back and clears the active routine.
+         * </summary>
+         */
+        private IEnumerator FlyBackRoutine(Vector3 pos, Quaternion rot, Action onArrive) {
+            try {
+                yield return Ease(
+                    root.transform.position, pos,
+                    root.transform.rotation, rot,
+                    Config.flyDuration.Value / 2f
+                );
+            }
+            finally {
+                flight = null;
+                onArrive?.Invoke();
             }
         }
 
@@ -375,14 +408,8 @@ namespace MoreRoutingFlags {
         private static Vector3 ClampAlongRay(Vector3 origin, Vector3 direction, float distance) {
             Vector3 endPos = origin + direction * distance;
 
-            if (Cache.routingFlag == null) {
-                return endPos;
-            }
-
-            int mask = ((LayerMask) maskField.GetValue(Cache.routingFlag)).value;
-
             RaycastHit hit;
-            bool didHit = Physics.Raycast(origin, direction, out hit, distance, mask);
+            bool didHit = Physics.Raycast(origin, direction, out hit, distance, Cache.terrainMask);
 
             if (didHit == true) {
                 endPos = hit.point - direction * 1f;
@@ -393,8 +420,7 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Computes the pulled-back overview position and look-at point
-         * that frames every flag plus the player.
+         * Computes an overview position for all flags.
          * </summary>
          * <param name="flags">The flags to frame</param>
          */
@@ -403,7 +429,17 @@ namespace MoreRoutingFlags {
             float radius = 1f;
 
             List<Vector3> points = new List<Vector3>();
-            points.Add(Cache.playerTransform != null ? Cache.playerTransform.position : Vector3.zero);
+
+            if (flags.Count == 0) {
+                points.Add(Cache.playerTransform != null ? Cache.playerTransform.position : Vector3.zero);
+
+                // Keep the empty overview above ground.
+                if (Cache.playerCamera != null) {
+                    Vector3 lookBack = -Cache.playerCamera.transform.forward;
+                    lookBack.y = Mathf.Max(lookBack.y, 0.3f);
+                    normalSum = lookBack;
+                }
+            }
 
             foreach (Flag flag in flags) {
                 points.Add(FlagPlacer.Resolve(flag));
@@ -469,8 +505,7 @@ namespace MoreRoutingFlags {
                 Vector3 endPos = ClampAlongRay(targetPos, -flag.normal, Config.flyPullBack.Value);
                 Quaternion endRot = Quaternion.Euler(flag.camY, flag.camX, 0f);
 
-                // Half duration: this is only ever the picker's "in" hop from an
-                // already-open overview, the same pacing as SwitchRoutine's second leg
+                // Match the switch animation's arrival speed.
                 yield return Ease(startPos, endPos, startRot, endRot, Config.flyDuration.Value / 2f);
             }
             finally {
@@ -549,8 +584,7 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Frames every flag plus the player in an overview shot.
-         * Used to open the picker.
+         * Frames all flags in an overview shot.
          * </summary>
          * <param name="flags">The flags to frame</param>
          * <returns>Whether the camera actually took over</returns>
@@ -584,9 +618,7 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Wraps Ease() so flight gets cleared back to null once the
-         * framing finishes -- without this, Zoom()'s "not mid-flight"
-         * guard stays permanently blocked after the first FrameAll.
+         * Frames the overview and clears the active routine.
          * </summary>
          */
         private IEnumerator FrameAllRoutine(Vector3 startPos, Vector3 endPos, Quaternion startRot, Quaternion endRot, float duration) {
@@ -600,10 +632,7 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Flies from the player's current view out to an overview of
-         * every flag in <paramref name="set"/>, then in to
-         * <paramref name="target"/>'s saved view -- the GTA-style
-         * character-switch shot used by the next/previous shortcuts.
+         * Flies through the overview to a target flag.
          * </summary>
          * <param name="set">The flag set to frame on the way out</param>
          * <param name="target">The flag to arrive at</param>

@@ -21,8 +21,12 @@ between them.
 
 # Features
 - Place up to a configurable number of routing flags per peak
-- Cycle between flags, or open a full-screen picker
+- Cycle between flags, or open a full-screen picker with a map overview
+- Place new flags from the picker, including on custom maps without a vanilla routing flag
+- Hold Delete to remove many flags quickly
 - Previous flags stay visible as the same routing flag as the main one
+- Flag data is compactly saved and existing saves migrate automatically
+- Automatically inactive in You Fall You Die and Free Solo
 
 # Installing
 ## BepInEx
@@ -49,6 +53,7 @@ after running the game once.
 | Delete flag | `Delete` |
 | Open picker | `Tab` |
 | Replace active flag (hold while placing) | `Left Ctrl` |
+| Place/confirm a flag in the picker | `E` |
 
 # Building from source
 The resulting plugin can be found in `bin/`.
@@ -79,7 +84,7 @@ location, add a `Config.props` file to the root of this repository:
 `BepInEx/plugins` after every build.
 
 # Credits
-Forked/referenced from a few of [Kaden's](github.com/Kaden548) mods, credit to their:
+Forked/referenced from a few of [Kaden's](github.com/Kaden548) mods, credit to them:
 
 - [poy-template-dotnet](https://github.com/Kaden5480/poy-template-dotnet)
 - Requires [UILib](https://github.com/Kaden5480/poy-ui-lib), optionally

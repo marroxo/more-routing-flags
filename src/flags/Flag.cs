@@ -1,3 +1,4 @@
+using PeterO.Cbor;
 using UnityEngine;
 
 namespace MoreRoutingFlags {
@@ -42,6 +43,36 @@ namespace MoreRoutingFlags {
             this.camX = camX;
             this.camY = camY;
             this.name = name;
+        }
+
+        /**
+         * <summary>
+         * Converts this flag to CBOR.
+         * </summary>
+         */
+        internal CBORObject ToCBOR() {
+            return CBORObject.NewMap()
+                .Add("offset", offset.ToCBOR())
+                .Add("normal", normal.ToCBOR())
+                .Add("camX", camX)
+                .Add("camY", camY)
+                .Add("name", name);
+        }
+
+        /**
+         * <summary>
+         * Creates a flag from CBOR.
+         * </summary>
+         * <param name="cbor">The CBOR map to read from</param>
+         */
+        internal static Flag FromCBOR(CBORObject cbor) {
+            return new Flag(
+                cbor["offset"].AsVector3(),
+                cbor["normal"].AsVector3(),
+                cbor["camX"].AsSingle(),
+                cbor["camY"].AsSingle(),
+                cbor["name"].AsString()
+            );
         }
     }
 }

@@ -52,6 +52,17 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
+         * Checks whether the mod can run in the current mode.
+         * </summary>
+         */
+        internal static bool IsActive() {
+            return enabled.Value == true
+                && GameManager.control.permaDeathEnabled == false
+                && GameManager.control.freesoloEnabled == false;
+        }
+
+        /**
+         * <summary>
          * Initializes the config by binding to the
          * provided `ConfigFile`.
          * </summary>

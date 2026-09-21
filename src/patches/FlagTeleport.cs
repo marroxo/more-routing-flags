@@ -68,7 +68,7 @@ namespace MoreRoutingFlags {
          * <param name="instance">The vanilla routing flag</param>
          */
         private static void Run(RoutingFlag instance) {
-            if (Config.enabled.Value == false || Plugin.currentSet == null) {
+            if (Config.IsActive() == false || Plugin.currentSet == null) {
                 return;
             }
 

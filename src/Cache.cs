@@ -1,3 +1,6 @@
+using System.Reflection;
+
+using HarmonyLib;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -10,6 +13,14 @@ namespace MoreRoutingFlags {
      * </summary>
      */
     internal static class Cache {
+        // Defaults for maps without a vanilla routing flag.
+        private const float fallbackPlayerUp = 0.2f;
+        private const float fallbackPlayerOut = 0.12f;
+        private const float fallbackWallOffset = 0.05f;
+
+        private static readonly FieldInfo maskField = AccessTools.Field(typeof(RoutingFlag), "mask");
+        private static readonly FieldInfo wallOffsetField = AccessTools.Field(typeof(RoutingFlag), "wallOffset");
+
         internal static RoutingFlag routingFlag           { get; private set; }
         internal static LeavePeakScene leavePeakScene      { get; private set; }
         internal static UECamera playerCamera              { get; private set; }
@@ -22,6 +33,73 @@ namespace MoreRoutingFlags {
         internal static FallingEvent fallingEvent           { get; private set; }
         internal static DistanceActivator distanceActivator { get; private set; }
         internal static Scene scene                        { get; private set; }
+
+        private static Logger logger = new Logger(typeof(Cache));
+
+        /**
+         * <summary>
+         * Validates reflected vanilla fields at startup.
+         * </summary>
+         */
+        internal static bool ValidateFields() {
+            bool ok = true;
+
+            if (maskField == null) {
+                logger.LogError("Could not find vanilla field 'RoutingFlag.mask'.");
+                ok = false;
+            }
+
+            if (wallOffsetField == null) {
+                logger.LogError("Could not find vanilla field 'RoutingFlag.wallOffset'.");
+                ok = false;
+            }
+
+            return ok;
+        }
+
+        /**
+         * <summary>
+         * Gets the vanilla terrain mask or a safe fallback.
+         * </summary>
+         */
+        internal static int terrainMask {
+            get {
+                if (routingFlag == null || maskField == null) {
+                    return Physics.DefaultRaycastLayers;
+                }
+
+                return ((LayerMask) maskField.GetValue(routingFlag)).value;
+            }
+        }
+
+        /**
+         * <summary>
+         * Gets the vertical teleport offset.
+         * </summary>
+         */
+        internal static float playerUp => routingFlag != null ? routingFlag.playerUp : fallbackPlayerUp;
+
+        /**
+         * <summary>
+         * Gets the forward teleport offset.
+         * </summary>
+         */
+        internal static float playerOut => routingFlag != null ? routingFlag.playerOut : fallbackPlayerOut;
+
+        /**
+         * <summary>
+         * Gets the surface offset for a flag.
+         * </summary>
+         */
+        internal static float wallOffset {
+            get {
+                if (routingFlag == null || wallOffsetField == null) {
+                    return fallbackWallOffset;
+                }
+
+                return (float) wallOffsetField.GetValue(routingFlag);
+            }
+        }
 
         /**
          * <summary>

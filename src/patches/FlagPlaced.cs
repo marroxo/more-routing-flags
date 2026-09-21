@@ -41,7 +41,7 @@ namespace MoreRoutingFlags {
          * <param name="instance">The vanilla routing flag</param>
          */
         private static void Run(RoutingFlag instance) {
-            if (Config.enabled.Value == false
+            if (Config.IsActive() == false
                 || Cache.leavePeakScene == null
                 || Plugin.currentSet == null
             ) {

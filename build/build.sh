@@ -17,6 +17,8 @@ mkdir -p "$BP_DIR"/plugins
 
 cp bin/release/net472/"$MOD_NAME.dll" \
     "$BP_DIR/plugins/"
+cp bin/release/net472/libs/CBOR.dll \
+    "$BP_DIR/plugins/"
 cp build/README.txt "$BP_DIR/README.txt"
 
 # Zip everything

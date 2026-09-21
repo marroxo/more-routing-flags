@@ -13,8 +13,6 @@ namespace MoreRoutingFlags {
     internal static class FlagPlacer {
         private static Logger logger = new Logger(typeof(FlagPlacer));
 
-        private static readonly FieldInfo maskField = AccessTools.Field(typeof(RoutingFlag), "mask");
-        private static readonly FieldInfo wallOffsetField = AccessTools.Field(typeof(RoutingFlag), "wallOffset");
         private static readonly FieldInfo posXField = AccessTools.Field(typeof(RoutingFlag), "flagPositionOnPeak_X");
         private static readonly FieldInfo posYField = AccessTools.Field(typeof(RoutingFlag), "flagPositionOnPeak_Y");
         private static readonly FieldInfo posZField = AccessTools.Field(typeof(RoutingFlag), "flagPositionOnPeak_Z");
@@ -24,18 +22,12 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Checks every vanilla field this class reflects into.
-         *
-         * Run once from Plugin.Awake so a bad field name fails loud
-         * at startup instead of a silent NullReferenceException deep
-         * in a Harmony patch the first time someone places a flag.
+         * Validates reflected vanilla fields at startup.
          * </summary>
          */
         internal static bool ValidateFields() {
             bool ok = true;
 
-            ok &= CheckField(maskField, "RoutingFlag.mask");
-            ok &= CheckField(wallOffsetField, "RoutingFlag.wallOffset");
             ok &= CheckField(posXField, "RoutingFlag.flagPositionOnPeak_X");
             ok &= CheckField(posYField, "RoutingFlag.flagPositionOnPeak_Y");
             ok &= CheckField(posZField, "RoutingFlag.flagPositionOnPeak_Z");
@@ -48,7 +40,7 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Logs a clear error if a reflected field failed to resolve.
+         * Reports a missing reflected field.
          * </summary>
          * <param name="field">The field to check</param>
          * <param name="name">The vanilla name to report if missing</param>
@@ -67,28 +59,20 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Resolves a flag's saved offset back to a world position,
-         * snapping it to the nearest surface.
+         * Resolves a saved flag position.
          * </summary>
          * <param name="flag">The flag to resolve</param>
          */
         internal static Vector3 Resolve(Flag flag) {
             Vector3 pos = Cache.leavePeakScene.transform.TransformPoint(flag.offset);
 
-            if (Cache.routingFlag == null) {
-                return pos;
-            }
-
-            int mask = ((LayerMask) maskField.GetValue(Cache.routingFlag)).value;
-            float wallOffset = (float) wallOffsetField.GetValue(Cache.routingFlag);
-
             RaycastHit hit;
             bool didHit = Physics.Raycast(
-                pos + flag.normal * 0.3f, -flag.normal, out hit, 0.6f, mask
+                pos + flag.normal * 0.3f, -flag.normal, out hit, 0.6f, Cache.terrainMask
             );
 
             if (didHit == true) {
-                pos = hit.point + flag.normal * wallOffset;
+                pos = hit.point + flag.normal * Cache.wallOffset;
             }
 
             return pos;
@@ -96,8 +80,7 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Applies a flag to the vanilla routing flag, so the vanilla
-         * "Move To Routing Flag" key and PlayerPrefs restore keep working.
+         * Applies a saved flag to the vanilla routing flag.
          * </summary>
          * <param name="flag">The flag to apply</param>
          */
@@ -126,8 +109,7 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Sets a single element of one of the vanilla per-peak
-         * float array fields.
+         * Sets a vanilla per-peak float value.
          * </summary>
          * <param name="field">The array field to write into</param>
          * <param name="index">The index to write</param>
@@ -145,20 +127,15 @@ namespace MoreRoutingFlags {
 
         /**
          * <summary>
-         * Replicates the vanilla routing flag teleport.
-         *
-         * Used only by the switch/picker path, the vanilla key still
-         * runs vanilla code.
+         * Teleports the player to a saved flag.
          * </summary>
          */
-        internal static void Teleport() {
-            if (Cache.routingFlag == null || Cache.playerTransform == null) {
+        internal static void Teleport(Flag flag) {
+            if (flag == null || Cache.playerTransform == null) {
                 return;
             }
 
-            Transform flagTransform = Cache.routingFlag.routingFlagTransform;
-
-            // Matches Kaden5480's FastReset.State.PlayerState.MoveTo
+            // Match Fast Reset's player-state cleanup.
             if (Cache.climbing != null) {
                 Cache.climbing.ReleaseResetBoth();
             }
@@ -174,24 +151,26 @@ namespace MoreRoutingFlags {
                 Cache.fallingEvent.fellToDeath = false;
             }
 
-            // Same offsets the vanilla teleport itself uses.
-            float playerUp = Cache.routingFlag.playerUp;
-            float playerOut = Cache.routingFlag.playerOut;
+            Vector3 pos = Resolve(flag);
+            Quaternion rot = Quaternion.LookRotation(-flag.normal);
 
-            Cache.playerTransform.position = flagTransform.position
-                + flagTransform.up * playerUp
-                + flagTransform.forward * playerOut;
+            Cache.playerTransform.position = pos
+                + (rot * Vector3.up) * Cache.playerUp
+                + (rot * Vector3.forward) * Cache.playerOut;
 
             if (Cache.playerRb != null) {
                 Cache.playerRb.velocity = Vector3.zero;
-                Cache.playerRb.isKinematic = true;
+
+                // Vanilla releases this on the next update.
+                if (Cache.routingFlag != null) {
+                    Cache.playerRb.isKinematic = true;
+                    Cache.routingFlag.usedFlagTeleport = true;
+                }
             }
 
             if (Cache.playerCamX != null) {
                 Cache.playerCamX.PlayerGrabbed();
             }
-
-            Cache.routingFlag.usedFlagTeleport = true;
 
             if (Cache.distanceActivator != null) {
                 Cache.distanceActivator.ForceCheck();
