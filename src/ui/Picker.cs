@@ -81,6 +81,7 @@ namespace MoreRoutingFlags {
                 return;
             }
 
+            PracticeMode.Enable();
             if (FlyCamera.FrameAll(set.flags) == false) {
                 Notifier.Notify(
                     "More Routing Flags",

@@ -135,6 +135,7 @@ namespace MoreRoutingFlags {
                 return;
             }
 
+            PracticeMode.Enable();
             // Match Fast Reset's player-state cleanup.
             if (Cache.climbing != null) {
                 Cache.climbing.ReleaseResetBoth();

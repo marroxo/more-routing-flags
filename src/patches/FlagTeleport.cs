@@ -52,6 +52,7 @@ namespace MoreRoutingFlags {
          */
         private static void Prefix(RoutingFlag __instance) {
             try {
+                PracticeMode.BeforeUpdate(__instance);
                 Run(__instance);
             }
             catch (System.Exception e) {
