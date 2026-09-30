@@ -8,8 +8,12 @@ namespace MoreRoutingFlags {
         private static readonly System.Reflection.FieldInfo watchField = AccessTools.Field(typeof(RoutingFlag), "pocketWatch");
         private static readonly System.Reflection.FieldInfo summitField = AccessTools.Field(typeof(RoutingFlag), "summitbox");
 
+        internal static bool Available => Config.IsActive() && Cache.routingFlag != null
+            && Cache.routingFlag.isActiveAndEnabled && Cache.routingFlag.routingFlagObject != null
+            && Cache.routingFlag.routingFlagObject.activeInHierarchy;
+
         internal static void Enable() {
-            if (!Config.IsActive()) return;
+            if (!Available) return;
             var flag = Cache.routingFlag;
             if (flag == null) return;
             owner = flag;

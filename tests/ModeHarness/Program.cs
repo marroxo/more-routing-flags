@@ -9,6 +9,10 @@ static class Program {
     static void Check(bool ok,string message) { if(!ok) throw new Exception(message);checks++; }
     static void Main() {
         var routing=new RoutingFlag();Cache.routingFlag=routing;
+        Check(PracticeMode.Available,"Available native flag permits picker entry");
+        routing.routingFlagObject.SetActive(false);PracticeMode.Enable();Check(!PracticeMode.Available && !routing.currentlyUsingFlag,"Locked or absent ground flag blocks picker and practice mode");
+        routing.routingFlagObject.SetActive(true);routing.isActiveAndEnabled=false;Check(!PracticeMode.Available,"Disabled native routing component blocks picker");
+        routing.isActiveAndEnabled=true;Cache.routingFlag=null;Check(!PracticeMode.Available,"Maps without native flag block picker");Cache.routingFlag=routing;
         var set=new FlagSet();set.Add(new Flag());set.Add(new Flag());Plugin.currentSet=set;
         FlagMarkers.Rebuild(set);
         var marker=GameObject.Clones[0];
@@ -48,7 +52,7 @@ namespace UnityEngine {
     public class Renderer { public bool enabled;public object sharedMaterial; }
     public class GameObject:Object {
         public static List<GameObject> Clones=new List<GameObject>();
-        public bool activeSelf=true;public string name,tag;public Transform transform;
+        public bool activeSelf=true;public bool activeInHierarchy=>activeSelf;public string name,tag;public Transform transform;
         public Collider collider=new Collider();public Renderer renderer=new Renderer();
         public GameObject() { transform=new Transform{gameObject=this}; }
         public void SetActive(bool active) { activeSelf=active; }
@@ -62,6 +66,7 @@ class PlayerMove:UnityEngine.Object { public static PlayerMove current=new Playe
 class TimeAttack { public bool disableTimeAttack; }
 class StamperPeakSummit { public GameObject gameObject=new GameObject();public bool isAlps1,isAlps2,isAlps3; }
 class RoutingFlag {
+    public bool isActiveAndEnabled=true;public GameObject routingFlagObject=new GameObject();
     public bool currentlyUsingFlag,customLevel_UsedRoutingFlag,isCustomLevel;
     public int currentPeak;public int[] usedRoutingFlag=new int[1];
     private TimeAttack pocketWatch=new TimeAttack();private StamperPeakSummit summitbox=new StamperPeakSummit();

@@ -304,7 +304,7 @@ namespace MoreRoutingFlags {
          * </summary>
          */
         private void TogglePicker() {
-            if (MoreRoutingFlags.Config.IsActive() == false || currentSet == null || Cache.routingFlag == null) {
+            if (!PracticeMode.Available || currentSet == null) {
                 return;
             }
 

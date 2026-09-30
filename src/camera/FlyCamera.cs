@@ -75,7 +75,7 @@ namespace MoreRoutingFlags {
          * </summary>
          */
         internal static bool CanStart() {
-            if (!Config.IsActive() || Cache.routingFlag == null) return false;
+            if (!PracticeMode.Available) return false;
             // Skip once already active: these checks would block every transition after the first
             if (isActive == false) {
                 if (UECamera.main != Cache.playerCamera) {

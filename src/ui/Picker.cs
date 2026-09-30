@@ -77,7 +77,7 @@ namespace MoreRoutingFlags {
          * <param name="set">The flag set to display</param>
          */
         internal void Open(FlagSet set) {
-            if (isOpen == true) {
+            if (isOpen == true || !PracticeMode.Available) {
                 return;
             }
 

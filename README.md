@@ -22,7 +22,7 @@ between them.
 # Features
 - Place up to a configurable number of routing flags per peak
 - Cycle between flags, or open a full-screen picker with a map overview
-- Place and orient flags from the picker on peaks with a vanilla routing flag
+- Place and orient flags from the picker only when the peak's vanilla routing flag is unlocked and available
 - Hold Delete to remove many flags quickly
 - Previous flags are visible only while routing flag mode is active
 - Picker use and flag travel immediately enable practice mode and disable scoring
