@@ -14,6 +14,7 @@ namespace MoreRoutingFlags {
          * </summary>
          */
         internal static void SceneLoad() {
+            if (!Config.IsActive()) return;
             GameObject obj = GameObject.Find("DistanceRenderCam");
             if (obj == null) {
                 return;

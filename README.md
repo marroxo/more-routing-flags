@@ -22,9 +22,11 @@ between them.
 # Features
 - Place up to a configurable number of routing flags per peak
 - Cycle between flags, or open a full-screen picker with a map overview
-- Place new flags from the picker, including on custom maps without a vanilla routing flag
+- Place and orient flags from the picker on peaks with a vanilla routing flag
 - Hold Delete to remove many flags quickly
-- Previous flags stay visible as the same routing flag as the main one
+- Previous flags are visible only while routing flag mode is active
+- Picker use and flag travel immediately enable practice mode and disable scoring
+- Automatically leave mod-enabled practice mode only when grounded with no flags, picker or flight
 - Flag data is compactly saved and existing saves migrate automatically
 - Automatically inactive in You Fall You Die and Free Solo
 
@@ -51,7 +53,7 @@ after running the game once.
 | Next flag | `]` |
 | Previous flag | `[` |
 | Delete flag | `Delete` |
-| Open picker | `Tab` |
+| Open picker | `Left Alt` |
 | Replace active flag (hold while placing) | `Left Ctrl` |
 | Place/confirm a flag in the picker | `E` |
 
@@ -61,6 +63,11 @@ The resulting plugin can be found in `bin/`.
 ## Dotnet build
 ```sh
 dotnet build -c <Debug|Release>
+```
+
+Mode and visibility checks (managed stubs; live gameplay still needs checking):
+```sh
+dotnet run --project tests/ModeHarness
 ```
 
 ## Visual Studio build

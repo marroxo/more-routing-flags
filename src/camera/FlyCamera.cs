@@ -75,6 +75,7 @@ namespace MoreRoutingFlags {
          * </summary>
          */
         internal static bool CanStart() {
+            if (!Config.IsActive() || Cache.routingFlag == null) return false;
             // Skip once already active: these checks would block every transition after the first
             if (isActive == false) {
                 if (UECamera.main != Cache.playerCamera) {
@@ -642,6 +643,7 @@ namespace MoreRoutingFlags {
             if (CanStart() == false) {
                 return;
             }
+            PracticeMode.Enable();
 
             if (instance.flight != null) {
                 Plugin.instance.StopCoroutine(instance.flight);

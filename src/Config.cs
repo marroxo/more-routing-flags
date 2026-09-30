@@ -56,7 +56,7 @@ namespace MoreRoutingFlags {
          * </summary>
          */
         internal static bool IsActive() {
-            return enabled.Value == true
+            return enabled != null && enabled.Value == true && GameManager.control != null
                 && GameManager.control.permaDeathEnabled == false
                 && GameManager.control.freesoloEnabled == false;
         }

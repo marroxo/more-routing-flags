@@ -322,11 +322,29 @@ namespace MoreRoutingFlags {
          * </summary>
          */
         private void Update() {
+            if (!MoreRoutingFlags.Config.IsActive()) {
+                picker?.Close();
+                if (FlyCamera.isActive || FlyCamera.isFlying) FlyCamera.Release();
+                hud?.Hide();
+                if (deleteHoldPending && currentSet != null) FlagStore.Save(currentKey, currentSet);
+                deleteHoldPending = false;
+                deleteHoldTimer = deleteHoldSyncTimer = 0f;
+                return;
+            }
             if (picker != null) {
                 picker.Update();
             }
 
             UpdateDeleteHold();
+        }
+
+        private void LateUpdate() {
+            FlagMarkers.UpdateVisibility();
+            if (MoreRoutingFlags.Config.IsActive() && Cache.routingFlag != null && !Cache.routingFlag.currentlyUsingFlag) {
+                if (Cache.routingFlag.routingFlagTransform != null)
+                    Cache.routingFlag.routingFlagTransform.gameObject.SetActive(false);
+                hud?.Hide();
+            }
         }
 
         /**

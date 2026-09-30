@@ -85,7 +85,7 @@ namespace MoreRoutingFlags {
          * <param name="flag">The flag to apply</param>
          */
         internal static void Apply(Flag flag) {
-            if (Cache.routingFlag == null || flag == null) {
+            if (!Config.IsActive() || Cache.routingFlag == null || flag == null) {
                 return;
             }
 
@@ -131,7 +131,7 @@ namespace MoreRoutingFlags {
          * </summary>
          */
         internal static void Teleport(Flag flag) {
-            if (flag == null || Cache.playerTransform == null) {
+            if (!Config.IsActive() || Cache.routingFlag == null || flag == null || Cache.playerTransform == null) {
                 return;
             }
 

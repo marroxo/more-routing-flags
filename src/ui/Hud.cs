@@ -61,7 +61,8 @@ namespace MoreRoutingFlags {
          * <param name="set">The flag set to display</param>
          */
         internal void Show(FlagSet set) {
-            if (Config.showHud.Value == false || Plugin.instance == null) {
+            if (!Config.IsActive() || Cache.routingFlag == null || !Cache.routingFlag.currentlyUsingFlag
+                || Config.showHud.Value == false || Plugin.instance == null) {
                 return;
             }
 
@@ -84,6 +85,14 @@ namespace MoreRoutingFlags {
 
             coroutine = DisplayRoutine(fromIndex, toIndex, total, finalText);
             Plugin.instance.StartCoroutine(coroutine);
+        }
+
+        internal void Hide() {
+            if (coroutine != null) {
+                Plugin.instance.StopCoroutine(coroutine);
+                coroutine = null;
+            }
+            overlay.Hide(force: true);
         }
 
         /**

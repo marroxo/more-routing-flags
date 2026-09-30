@@ -45,6 +45,16 @@ namespace MoreRoutingFlags {
 
                 markers.Add(BuildMarker(set.flags[i]));
             }
+            UpdateVisibility();
+        }
+
+        internal static void UpdateVisibility() {
+            bool visible = Config.IsActive() && Cache.routingFlag != null
+                && Cache.routingFlag.currentlyUsingFlag
+                && (Config.showInactive.Value || pickable);
+            foreach (var marker in markers) {
+                if (marker != null && marker.activeSelf != visible) marker.SetActive(visible);
+            }
         }
 
         /**
@@ -68,6 +78,7 @@ namespace MoreRoutingFlags {
                     collider.enabled = value;
                 }
             }
+            UpdateVisibility();
         }
 
         /**
@@ -81,13 +92,13 @@ namespace MoreRoutingFlags {
             GameObject marker = GameObject.Instantiate(Cache.routingFlag.routingFlagTransform.gameObject);
             marker.name = "MoreRoutingFlags Marker";
             marker.tag = "Untagged";
-            marker.SetActive(true);
+            marker.SetActive(false);
             marker.AddComponent<FlagMarkerRef>().flag = flag;
 
             marker.transform.position = FlagPlacer.Resolve(flag);
             marker.transform.forward = -flag.normal;
 
-            foreach (Collider collider in marker.GetComponentsInChildren<Collider>()) {
+            foreach (Collider collider in marker.GetComponentsInChildren<Collider>(true)) {
                 collider.enabled = pickable;
             }
 

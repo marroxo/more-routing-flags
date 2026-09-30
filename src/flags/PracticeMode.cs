@@ -9,6 +9,7 @@ namespace MoreRoutingFlags {
         private static readonly System.Reflection.FieldInfo summitField = AccessTools.Field(typeof(RoutingFlag), "summitbox");
 
         internal static void Enable() {
+            if (!Config.IsActive()) return;
             var flag = Cache.routingFlag;
             if (flag == null) return;
             owner = flag;
@@ -22,6 +23,7 @@ namespace MoreRoutingFlags {
         }
 
         internal static void BeforeUpdate(RoutingFlag flag) {
+            if (!Config.IsActive()) return;
             if (owner != flag || owner == null) return;
             // A manual toggle is respected until the next picker/teleport action.
             if (!flag.currentlyUsingFlag) { owner = null; return; }
